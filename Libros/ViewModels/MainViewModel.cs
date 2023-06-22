@@ -1,10 +1,12 @@
 ﻿using GalaSoft.MvvmLight.Command;
 using Libros.Models;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -16,19 +18,17 @@ namespace Libros.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged
     {
-        private readonly LibreriaContext cx;
         public List<string> Vista { get; set; }
         public string Error { get; set; } = "";
         public Libro Libro { get; set; } = new Libro();
         public Libro LibroCopia { get; set; } = new Libro();
-        public ObservableCollection<Libro> Libros { get; set; }= new ObservableCollection<Libro>();
+        public ObservableCollection<Libro> Libros { get; set; } = new ObservableCollection<Libro>();
         public ICommand VistaCommand { get; set; }
         public ICommand GuardarCommand { get; set; }
         public ICommand EliminarCommand { get; set; }
-        Regex regex = new Regex(@"^\d$");
+        Regex regex = new Regex(@"^[0-9]+$");
         public MainViewModel()
         {
-            cx = new LibreriaContext();
             Vista = new List<string>();
             for (int i = 0; i < 3; i++)
             {
@@ -44,16 +44,20 @@ namespace Libros.ViewModels
         private void Eliminar()
         {
             if (Libro != null)
-            {
-                cx.Libro.Remove(Libro);
-                cx.SaveChanges();
-                MostrarLibros();
-            }
+                Libros.Remove(Libro);
             else
                 Error = "Favor de seleccionar el libro a eliminar";
+            GuardarLibros();
             Vistas("");
             Actualizar();
         }
+
+        private void GuardarLibros()
+        {
+            var json = JsonConvert.SerializeObject(Libros);
+            File.WriteAllText("Libros.json", json);
+        }
+
         //Agregar y editar
         private void Guardar(string tipo)
         {
@@ -73,17 +77,15 @@ namespace Libros.ViewModels
                             Error = "Favor de dar el isbn correspondiente.";
                         if (!regex.IsMatch(Libro.Isbn))
                             Error = "Favor de introducir solamente numeros en el apartado de ISBN.";
-                        if (!regex.IsMatch(Libro.YearPublicacion))
-                            Error = "Favor de introducir solamente numeros en el apartado del año.";
                         if (string.IsNullOrWhiteSpace(Libro.YearPublicacion))
                             Error = "Favor de dar el año en el que se publico el libro.";
-                        var validar = cx.Libro.FirstOrDefault(x => x.Titulo == Libro.Titulo && x.YearPublicacion == Libro.YearPublicacion);
+                        if (!regex.IsMatch(Libro.YearPublicacion))
+                            Error = "Favor de introducir solamente numeros en el apartado del año.";
+                        var validar = Libros.FirstOrDefault(x => x.Titulo == Libro.Titulo && x.YearPublicacion == Libro.YearPublicacion);
                         if (string.IsNullOrWhiteSpace(Error))
                             if (validar == null)
                             {
-                                cx.Libro.Add(Libro);
-                                cx.SaveChanges();
-                                MostrarLibros();
+                                Libros.Add(Libro);
                                 Vistas("");
                             }
                             else
@@ -91,42 +93,34 @@ namespace Libros.ViewModels
                     }
                     else
                     {
-                        //Aqui seria del editar, que es lo mismo que agregar solo que no se editara el nombre
-                        //Debi haber creado un metodo para esto pero ya fue
-                        if (string.IsNullOrWhiteSpace(Libro.Autor))
+                        if (string.IsNullOrWhiteSpace(LibroCopia.Autor))
                             Error = "Favor de escribir el nombre del autor.";
-                        if (string.IsNullOrWhiteSpace(Libro.Editorial))
+                        if (string.IsNullOrWhiteSpace(LibroCopia.Editorial))
                             Error = "Favor de escribir el nombre de la editorial.";
-                        if (string.IsNullOrWhiteSpace(Libro.Titulo))
+                        if (string.IsNullOrWhiteSpace(LibroCopia.Titulo))
                             Error = "Favor de escribir el titulo del libro.";
-                        if (string.IsNullOrWhiteSpace(Libro.Isbn))
+                        if (string.IsNullOrWhiteSpace(LibroCopia.Isbn))
                             Error = "Favor de dar el isbn correspondiente.";
-                        if (regex.IsMatch(Libro.Isbn.ToString()))
+                        if (!regex.IsMatch(LibroCopia.Isbn.ToString()))
                             Error = "Favor de introducir solamente numeros en el apartado de ISBN.";
-                        if (string.IsNullOrWhiteSpace(Libro.YearPublicacion))
+                        if (string.IsNullOrWhiteSpace(LibroCopia.YearPublicacion))
                             Error = "Favor de dar el año en el que se publico el libro.";
-                        var original = cx.Libro.Where(x => x.Titulo == LibroCopia.Titulo && x.YearPublicacion == Libro.YearPublicacion).FirstOrDefault();
-                        if (original != null)
+                        if (!regex.IsMatch(LibroCopia.YearPublicacion.ToString()))
+                            Error = "Favor de introducir solamente numeros en el apartado del año.";
+                        var original = Libros.Where(x => x.Titulo == LibroCopia.Titulo && x.YearPublicacion == Libro.YearPublicacion).FirstOrDefault();
+                        if (original != null && string.IsNullOrWhiteSpace(Error))
                         {
-                            original.Autor = LibroCopia.Autor;
-                            original.Editorial = LibroCopia.Editorial;
-                            original.Titulo = LibroCopia.Titulo;
-                            original.Isbn = LibroCopia.Isbn;
-                            original.YearPublicacion = LibroCopia.YearPublicacion;
-                        }
-                        if (string.IsNullOrWhiteSpace(Error))
-                        {
-                            cx.Libro.Update(original);
-                            cx.SaveChanges();
-                            MostrarLibros();
+                            Libros.Remove(original);
+                            Libros.Add(LibroCopia);
                             Vistas("");
                             Libro = new Libro();
                         }
                     }
                 else
                 {
-                    Error = "Esto no deberia salir, si sale es null, regvisar bindings x.x";
+                    Error = "Esto no deberia salir, si sale es null, revisar bindings x.x";
                 }
+                GuardarLibros();
                 Actualizar();
             }
             catch (Exception ex)
@@ -175,13 +169,14 @@ namespace Libros.ViewModels
                 Error = "Favor de seleccionar el libro a editar/eliminar";
             Actualizar();
         }
-
-        //Mostrar todas las pinacotecas
         public void MostrarLibros()
         {
             Libros.Clear();
-            var pinas = cx.Libro.OrderBy(x => x.YearPublicacion);
-            pinas.ForEachAsync(x => Libros.Add(x));
+            if (File.Exists("Libros.json"))
+            {
+                var json = File.ReadAllText("Libros.json");
+                Libros = JsonConvert.DeserializeObject<ObservableCollection<Libro>>(json);
+            }
             Actualizar();
         }
         //Nada, eso actualizar
