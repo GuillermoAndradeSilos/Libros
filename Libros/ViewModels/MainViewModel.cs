@@ -43,12 +43,11 @@ namespace Libros.ViewModels
 
         private void Eliminar()
         {
-            if (Libro != null)
+            if (Libro != null && Libro.Titulo != null)
                 Libros.Remove(Libro);
             else
                 Error = "Favor de seleccionar el libro a eliminar";
             GuardarLibros();
-            Vistas("");
             Actualizar();
         }
 
